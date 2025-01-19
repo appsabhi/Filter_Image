@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Image Enhancer</title>
+    <link rel="stylesheet" href="/filter.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/14.6.3/nouislider.min.css"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+    />
+  </head>
+  <body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/14.6.3/nouislider.min.js"></script>
+
+    <span class="loader" id="loder"></span>
+
+    <div class="container">
+      <form id="uploadForm" enctype="multipart/form-data">
+        <img
+          id="preview_img"
+          src=""
+          alt=""
+          style="position: relative; z-index: 10"
+        />
+
+        <img
+          id="filtered_image"
+          src=""
+          alt=""
+          style="position: relative; z-index: 20"
+          crossorigin="anonymous"
+        />
+
+        <input
+          type="file"
+          id="imageInput"
+          onchange="preview_image()"
+          name="image"
+          accept="image/*"
+          required
+        />
+
+        <br />
+
+        <a href="" id="download"> <i class="fas fa-upload"></i></a>
+        <button value="" onclick="image_filtering(event)">
+          <i class="fas fa-upload"></i>Filter
+        </button>
+
+        <input type="hidden" name="bucket" value=" ai-direct-upload" />
+        <input type="hidden" name="content_type" value="image/jpeg" />
+      </form>
+      <div id="result" style="margin-top: 20px"></div>
+    </div>
+
+    <script>
+      let currentImage = null; // Store the latest version of the image
+      //  preview image
+      function preview_image() {
+        let files = document.getElementById("imageInput").files;
+        let imageTag = document.getElementById("preview_img");
+
+        if (files.length === 0) {
+          alert("Please select an image.");
+          return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (e) => {
+          currentImage = new Image();
+          currentImage.src = e.target.result;
+
+          currentImage.onload = () => {
+            imageTag.src = currentImage.src;
+            imageTag.style.display = "block";
+          };
+        };
+
+        reader.readAsDataURL(files[0]);
+      }
+
+      async function image_filtering(event) {
+        event.preventDefault();
+
+        let loader = document.getElementById("loder");
+        let imagetag = document.getElementById("filtered_image");
+        let preview_imagetag = document.getElementById("preview_img");
+        let form = document.getElementById("uploadForm");
+        let files = document.getElementById("imageInput").files;
+        let form_data = new FormData();
+        let file = files[0];
+
+        if (files.length === 0) {
+          alert("Please select an image.");
+          return;
+        }
+        try {
+          form_data.append("image", file);
+
+          loader.style.display = "block";
+
+          let response = await fetch("/image_filter", {
+            method: "POST",
+            body: form_data,
+          });
+
+          let data = await response.json();
+
+          if (data.success === true) {
+            preview_imagetag.style.display = "none";
+            let a = document.getElementById("download");
+
+            imagetag.src = data.filtered_image;
+
+            imagetag.style.display = "block";
+            const originalImage = new Image();
+            const reader = new FileReader();
+
+            // FileReader to load the selected image
+            reader.onload = function (event) {
+              originalImage.src = event.target.result; // Set the source of the original image
+
+              // Wait until the original image is fully loaded
+              originalImage.onload = function () {
+                // Create a canvas element
+                const canvas = document.createElement("canvas");
+                const ctx = canvas.getContext("2d");
+
+                // Set canvas size to match the dimensions of the image
+                canvas.width = imagetag.naturalWidth;
+                canvas.height = imagetag.naturalHeight;
+
+                // Apply filters to the canvas context
+                ctx.filter = "brightness(0.9) saturate(1.3) contrast(1)  "; // Apply a brightness filter
+
+                // Draw the image from the imagetag (filtered image) onto the canvas
+                ctx.globalAlpha = 0.8; // Set transparency for blending
+                ctx.drawImage(imagetag, 0, 0, canvas.width, canvas.height);
+
+                // Now draw the original image on top of the filtered image
+                ctx.globalAlpha = 0.5; // Maintain the transparency for blending
+                ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+                // Convert the canvas content to a Blob and download
+                canvas.toBlob(function (blob) {
+                    console.log(blob)
+                  const url = URL.createObjectURL(blob);
+                  console.log(url);
+
+                  // Update the anchor tag for manual download
+                  a.style.display = "inline-block"; // Ensure the anchor is visible
+                  a.href = url;
+                  a.download = `filtered_image${Date.now()}.jpg`;
+                  imagetag.src = url; // Optional: Display the image if needed
+
+                  // Revoke the object URL after some time or after image loading
+                  a.addEventListener("click", () => {
+                    setTimeout(() => URL.revokeObjectURL(url), 5000); // Allow time for the download
+                  });
+
+                  imagetag.onload = function () {
+                    URL.revokeObjectURL(url); // Cleanup after the image is loaded
+                  };
+                }, "image/jpg");
+              };
+            };
+
+            // Start reading the file as a Data URL
+            reader.readAsDataURL(file);
+
+            loader.style.display = "none";
+          } else if (data.error) {
+            alert(data.error);
+          }
+        } catch (error) {
+          alert(error.message);
+        }
+      }
+    </script>
+  </body>
+</html>
+<!-- document.body.removeChild(a);
+URL.revokeObjectURL(url); -->
